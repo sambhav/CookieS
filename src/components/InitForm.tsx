@@ -1,12 +1,12 @@
 import React from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import Typography from '@material-ui/core/Typography';
-import { Grid, TextField, Button } from '@material-ui/core';
-import theme from "../theme";
-import { useForm, Resolver } from "react-hook-form";
+import { Grid, Button } from '@material-ui/core';
+import { useForm, Resolver } from 'react-hook-form';
 import axios from 'axios';
-import CookieCutterTemplate from "./initform/CookieCutterTemplate"
-import UserRepo from "./initform/UserRepo"
+import theme from '../theme';
+import CookieCutterTemplate from './initform/CookieCutterTemplate';
+import UserRepo from './initform/UserRepo';
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -32,42 +32,40 @@ type Inputs = {
 };
 
 const resolver: Resolver<any> = async (values) => {
-  const { data }: any =
-    await axios.get(`http://localhost:8000/validate/${values.org}/${values.repo}`)
+  const { data }: any = await axios.get(`http://localhost:8000/validate/${values.org}/${values.repo}`);
   const errors: any = {};
   if (data?.org) {
-    errors["org"] = {
-      "type": "validate",
-      "message": data.org
-    }
+    errors.org = {
+      type: 'validate',
+      message: data.org,
+    };
   }
   return {
     values: {
       template: {
         repo: values.template,
-        directory: values.directory || ""
+        directory: values.directory || '',
       },
       repo: values.repo,
-      org: values.org
+      org: values.org,
     },
-    errors: errors
+    errors,
   };
 };
 
-
 export default function InitForm() {
   const classes = useStyles(theme);
-  const { register, handleSubmit, errors } = useForm<Inputs>({ resolver, reValidateMode: "onSubmit" });
+  const { register, handleSubmit, errors } = useForm<Inputs>({ resolver, reValidateMode: 'onSubmit' });
   const onSubmit = (data: any) => {
     const requestOptions = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     };
-    fetch("http://localhost:8000/form", requestOptions)
-      .then(response => response.json())
-      .then(data => console.log(data))
-  }
+    fetch('http://localhost:8000/form', requestOptions)
+      .then((response) => response.json())
+      .then((data) => console.log(data));
+  };
   return (
     <div className={classes.paper}>
       <Typography component="h1" variant="h5">
@@ -89,6 +87,5 @@ export default function InitForm() {
         </Button>
       </form>
     </div>
-
   );
 }
