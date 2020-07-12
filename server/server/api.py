@@ -60,7 +60,7 @@ BOT_MAIL = os.environ.get("WEB_CC_BOT_MAIL", "sambhavs.email@gmail.com")
 @lru_cache()
 def get_git_client():
     """Returns a Github client"""
-    if BASE_URL == GITHUB_API_URL:
+    if BASE_URL == GITHUB_URL:
         host_name = GITHUB_API_URL
     else:
         host_name = f"https://{BASE_URL}/api/v3"
