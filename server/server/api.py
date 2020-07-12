@@ -1,10 +1,10 @@
 import json
-from logging import error
 import os
 import shlex
 import subprocess
 import tempfile
 from functools import lru_cache, partial
+from logging import error
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -29,27 +29,143 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TOKEN = ""
-HOST_NAME = ""
-BASE_URL = "github.com"
+
+# APPLICATION CONSTANTS
+# Remote name for the Github repository to be create.
+# Note: We don't use origin to avoid clashes if the cookiecutter
+# itself sets up some git configs.
 CC_ORIGIN = "cc-origin"
-BOT_NAME = "samj1912"
-BOT_MAIL = "cc-creator@creator.cc"
+GITHUB_URL = "github.com"
+GITHUB_API_URL = "https://api.github.com"
+
+
+# USER CONFIG
+# Token for the role account. Note: This is a secret value
+# and should not be checked in.
+TOKEN = os.environ.get("WEB_CC_TOKEN")
+# Github API host name. Useful for GHE usage.
+HOST_NAME = os.environ.get("WEB_CC_GITHUB_HOST_NAME", "")
+# Github base url. Useful for GHE usage.
+BASE_URL = os.environ.get("WEB_CC_GITHUB_BASE_URL", GITHUB_URL)
+# Role account username for use by the backend.
+BOT_NAME = os.environ.get("WEB_CC_BOT_NAME", "samj1912")
+# Role account email for use by the backend.
+# Will be used to create commits.
+BOT_MAIL = os.environ.get("WEB_CC_BOT_MAIL", "sambhavs.email@gmail.com")
+
+
+## Common Github utilities ##
 
 
 @lru_cache()
 def get_git_client():
-    host_name = HOST_NAME or "https://api.github.com"
+    """Returns a Github client"""
+    if BASE_URL == GITHUB_API_URL:
+        host_name = GITHUB_API_URL
+    else:
+        host_name = f"https://{BASE_URL}/api/v3"
+    host_name = HOST_NAME or host_name
     return Github(base_url=host_name, login_or_token=TOKEN)
 
 
 @lru_cache()
 def get_current_user():
+    """Returns the PyGithub object representing the role account used for CC creation."""
     client = get_git_client()
     return client.get_user(BOT_NAME)
 
 
+## Initial user input gathering stage ##
+
+
+@app.get("/cookicutters")
+def get_cookicutters():
+    """REST end point to fetch the list of supported cookiecutter.
+
+    Returns a map of cookiecutter repo names in `org/repo` format.
+    If the repository has nested cookiecutter in subdirectories, it
+    also returns a list of subdirectories which can be used. Otherwise
+    each key is associated with an empty list.
+    """
+    return {"cookiecutters": {"audreyr/cookiecutter-pypackage": [],}}
+
+
+def validate_org(org_name: str):
+    """Validates if the user provided organization is a valid target to create the repository."""
+    client = get_git_client()
+    try:
+        org = client.get_organization(org_name)
+    except GithubException:
+        return "Please enter a valid organization"
+    is_member = org.has_in_members(get_current_user())
+    if not is_member:
+        return (
+            f"{BOT_NAME} is not a member of the '{org_name}' organization."
+            f" Please invite {BOT_NAME} to this organization to continue."
+        )
+    if not org.members_can_create_repositories:
+        return "This organization does not allow members to create repositories."
+    return ""
+
+
+@app.get("/validate/{org_name}/{repo_name}")
+def validate(org_name: str, repo_name: str):
+    """Validates the user provided organization and repository.
+
+    If the role account doesn't have access to the user-specified
+    organization or if it doesn't exist, this end point returns an
+    error with an appropriate message.
+    """
+    org_response = validate_org(org_name)
+    return {"org": org_response}
+
+
+## Cookie cutter creation stage ##
+
+
+class Template(BaseModel):
+    repo: str = "audreyr/cookiecutter-pypackage"
+    directory: str = ""
+
+
+class FormDetails(BaseModel):
+    template: Template = Template()
+    org: str
+    repo: str
+    cc_context: Dict[str, Any] = {}
+    user_inputs: Dict[str, Any] = {}
+    next_key: Optional[str] = None
+    next_value: Optional[Union[str, List[str]]] = None
+    done: bool = False
+
+
+### Interactive form endpoint ###
+
+
+@app.post("/form")
+def form(details: FormDetails):
+    """Iterative end-point for determining cookiecutter user input fields.
+
+    Currently only supports `string` or `list` values in `cookiecutter.json`.
+    It also searches the user provides organization for a set of defaults for
+    a cookiecutter.
+
+    The defaults are searched for in {user_org}/.github/{cc_name}/cookiecutter.json.
+
+    The end point iteratively asks for the next set of inputs via `next_key` and `next_value`.
+    """
+    if not details.cc_context:
+        details.cc_context = get_config(
+            details.template.repo, details.template.directory, details.org
+        )
+    details.next_key, details.next_value, details.done = get_next_option(
+        details.cc_context, details.user_inputs
+    )
+    return details
+
+
 def get_config(repo_name, directory, user_org):
+    """Fetches the cookiecutter input template and the user defaults stored in Github."""
     client = get_git_client()
     cc_repo = client.get_repo(repo_name)
     config_file_path = "cookiecutter.json"
@@ -71,23 +187,8 @@ def get_config(repo_name, directory, user_org):
     return context
 
 
-class Template(BaseModel):
-    repo: str = "audreyr/cookiecutter-pypackage"
-    directory: str = ""
-
-
-class FormDetails(BaseModel):
-    template: Template = Template()
-    org: str
-    repo: str
-    cc_context: Dict[str, Any] = {}
-    user_inputs: Dict[str, Any] = {}
-    next_key: Optional[str] = None
-    next_value: Optional[Union[str, List[str]]] = None
-    done: bool = False
-
-
 def get_next_option(cc_context, user_inputs):
+    """Parses the cookiecutter template and current context and determines the input to be requested."""
     context = {}
     context["cookiecutter"] = cc_context
     env = StrictEnvironment(context=context)
@@ -101,7 +202,26 @@ def get_next_option(cc_context, user_inputs):
     return None, None, True
 
 
+### Creationg end point ###
+
+
+@app.post("/create")
+def create(details: FormDetails):
+    """The actual end point for cookiecutter creation.
+
+    Takes in the final FormDetails object once "/form" end-point sets
+    the `details.done` flag to true. All the values from `details.user_inputs`
+    are passed to cookiecutter for generation and the output folder is uploaded
+    to Github at the provided org and repository.
+    """
+    try:
+        return validate_and_create(details)
+    except BaseException as error:
+        raise HTTPException(status_code=500, detail=f"Error Occured: {error}")
+
+
 def validate_and_create(details: FormDetails):
+    """Validates the final form inputs and creates the user repo from cookiecutter."""
     missing_values = set(details.cc_context) - set(details.user_inputs)
     if missing_values:
         raise HTTPException(
@@ -136,55 +256,3 @@ def validate_and_create(details: FormDetails):
             f"git commit -m 'Initialize repository with CC: {details.template.repo}'"
         )
         shell_command(f"git push {CC_ORIGIN} master -f")
-
-
-@app.get("/cookicutters")
-def get_cookicutters():
-    return {
-        "cookiecutters": {
-            "audreyr/cookiecutter-pypackage": [],
-        }
-    }
-
-
-def validate_org(org_name: str):
-    client = get_git_client()
-    try:
-        org = client.get_organization(org_name)
-    except GithubException:
-        return "Please enter a valid organization"
-    is_member = org.has_in_members(get_current_user())
-    if not is_member:
-        return (
-                f"{BOT_NAME} is not a member of the '{org_name}' organization."
-                f" Please invite {BOT_NAME} to this organization to continue."
-            )
-    if not org.members_can_create_repositories:
-        return "This organization does not allow members to create repositories."
-    return ""
-
-
-@app.get("/validate/{org_name}/{repo_name}")
-def validate(org_name: str, repo_name: str):
-    org_response = validate_org(org_name)
-    return {"org": org_response}
-
-
-@app.post("/form")
-def form(details: FormDetails):
-    if not details.cc_context:
-        details.cc_context = get_config(
-            details.template.repo, details.template.directory, details.org
-        )
-    details.next_key, details.next_value, details.done = get_next_option(
-        details.cc_context, details.user_inputs
-    )
-    return details
-
-
-@app.post("/create")
-def create(details: FormDetails):
-    try:
-        return validate_and_create(details)
-    except BaseException as error:
-        raise HTTPException(status_code=500, detail=f"Error Occured: {error}")
