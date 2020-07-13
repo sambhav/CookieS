@@ -1,6 +1,6 @@
-# web-cc
+# CookieS
 
-Web-CC is Cookiecutter as a service. It spins up a web server that is able to discover
+CookieS is a Cookiecutter as a Service platform. It spins up a web server that is able to discover
 and register Github repostiories tagged with `cookiecutter` in their topics. It can
 then dynamically generate forms mirroring the inputs required for the cookiecutter creation
 and finally create a Github repository with the output. It also supports default values
