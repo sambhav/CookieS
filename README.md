@@ -1,4 +1,5 @@
-# CookieS
+# ![image](https://user-images.githubusercontent.com/16130816/87261930-09725f00-c4b0-11ea-986b-fef3a4d1b529.png) CookieS ![image](https://user-images.githubusercontent.com/16130816/87261894-e3e55580-c4af-11ea-9d60-49dee1b35b21.png)
+
 
 CookieS is a Cookiecutter as a Service platform. It spins up a web server that is able to discover
 and register Github repostiories tagged with `cookiecutter` in their topics. It can
@@ -83,3 +84,7 @@ If you aren’t satisfied with the build tool and configuration choices, you can
 Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
 
 You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+
+---
+
+Icon made by Freepik from www.flaticon.com
