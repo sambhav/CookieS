@@ -176,7 +176,7 @@ def get_config(repo_name, directory, user_org):
         config_repo = client.get_repo(f"{user_org}/.github")
     except GithubException:
         return context
-    user_config = os.path.join(repo_name, config_file_path)
+    user_config = os.path.join("cookiecutter", repo_name, config_file_path)
     try:
         user_defaults = json.loads(
             config_repo.get_contents(user_config).decoded_content

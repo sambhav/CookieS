@@ -7,6 +7,7 @@ import {
 import theme from './theme';
 import InitForm from './components/InitForm';
 import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
+import CCForm from './components/CCForm';
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
           <CssBaseline />
           <Switch>
             <Route path="/create">
+              <CCForm />
             </Route>
             <Route path="/">
               <InitForm />

@@ -7,6 +7,7 @@ import axios from 'axios';
 import theme from '../theme';
 import CookieCutterTemplate from './initform/CookieCutterTemplate';
 import UserRepo from './initform/UserRepo';
+import { useHistory } from 'react-router-dom';
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -56,6 +57,7 @@ const resolver: Resolver<any> = async (values) => {
 export default function InitForm() {
   const classes = useStyles(theme);
   const { register, handleSubmit, errors } = useForm<Inputs>({ resolver, reValidateMode: 'onSubmit' });
+  const history = useHistory();
   const onSubmit = (data: any) => {
     const requestOptions = {
       method: 'POST',
@@ -64,7 +66,7 @@ export default function InitForm() {
     };
     fetch('http://localhost:8000/form', requestOptions)
       .then((response) => response.json())
-      .then((data) => console.log(data));
+      .then((data) => history.push("/create", data));
   };
   return (
     <div className={classes.paper}>
