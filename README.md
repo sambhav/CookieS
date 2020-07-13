@@ -6,6 +6,12 @@ then dynamically generate forms mirroring the inputs required for the cookiecutt
 and finally create a Github repository with the output. It also supports default values
 for cookiecutters based on user specified organizations.
 
+# Demo
+Here is a demo of the web UI with the pypackage cookiecutter. Notice how it loadede the defaults from the .github repository
+of the user-specified org.
+
+![cookiecutter-demo](https://user-images.githubusercontent.com/16130816/87260603-b3e78380-c4aa-11ea-8078-5c8750752d0e.gif)
+
 ## Server Docs
 
 ### Development setup
