@@ -65,9 +65,9 @@ export default function InitForm() {
   const classes = useStyles(theme);
   const { register, handleSubmit, errors } = useForm<Inputs>({ resolver, reValidateMode: 'onSubmit' });
   const history = useHistory();
-  const [cookies] = useCookies(['samj1912-cookies']);
+  const [cookies] = useCookies();
   if (!cookies.token) {
-    return <Redirect to={'/login'} />
+    return <Redirect to={'/authorize'} />
   }
   const onSubmit = (data: any) => {
     const requestOptions = {

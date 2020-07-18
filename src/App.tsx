@@ -6,7 +6,7 @@ import {
 } from '@material-ui/core';
 import theme from './theme';
 import InitForm from './components/InitForm';
-import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Switch, Redirect } from 'react-router-dom';
 import CCForm from './components/CCForm';
 
 import { CookiesProvider } from 'react-cookie';
@@ -24,7 +24,7 @@ export default function App() {
             <Toolbar>
               <Typography variant="h6" color="inherit" noWrap>
                 Cookiecutter Creator
-          </Typography>
+              </Typography>
             </Toolbar>
           </AppBar>
           <Container component="main" maxWidth="sm">
@@ -39,8 +39,11 @@ export default function App() {
               <Route path="/authorize">
                 <AuthorizationForm />
               </Route>
-              <Route path="/">
+              <Route exact={true} path="/">
                 <InitForm />
+              </Route>
+              <Route >
+                <Redirect to="/authorize" />
               </Route>
             </Switch>
           </Container>

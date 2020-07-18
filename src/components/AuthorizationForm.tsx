@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import Typography from '@material-ui/core/Typography';
 import { Button } from '@material-ui/core';
@@ -34,25 +34,27 @@ export default function AuthorizationForm() {
   const classes = useStyles(theme);
   const { handleSubmit } = useForm<Inputs>({ reValidateMode: 'onSubmit' });
   const history = useHistory();
-  const [cookies, setCookie] = useCookies(['samj1912-cookies']);
-
+  const [cookies, setCookie] = useCookies();
   const onSubmit = (data: any) => {
     fetch('http://localhost:8000/oauth-url')
       .then((response) => response.json())
       .then((data) => {
-        console.log(data);
         window.location.replace(data.url);
       });
   };
   const code = useQuery().get("code");
-  if (code) {
-    fetch(`http://localhost:8000/oauth-token/${code}`)
-      .then((response) => response.json())
-      .then((data) => {
-        setCookie("token", data.token);
-        history.push("/");
-      });
-  }
+  useEffect(() => {
+    if (code) {
+      fetch(`http://localhost:8000/oauth-token/${code}`)
+        .then((response) => response.json())
+        .then((data) => {
+          setCookie("token", data.token, { maxAge: 60 * 60 * 24 });
+          history.push("/");
+        });
+    }
+  },
+    [code, history, setCookie]
+  );
 
   return (
     <div className={classes.paper}>

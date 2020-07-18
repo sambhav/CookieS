@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import Typography from '@material-ui/core/Typography';
 import { Grid, Button, TextField } from '@material-ui/core';
@@ -138,27 +138,38 @@ export default function CCForm() {
         history.push(newData.done ? "/created" : "/create", newData);
       });
   };
-  const { user_inputs, next_key, next_value, done } = location.state;
-  return (
-    <div className={classes.paper}>
-      <Typography component="h1" variant="h5">
-        Please provide inputs
-      </Typography>
-      <form className={classes.form} onSubmit={handleSubmit(onSubmit)} >
-        <Grid container spacing={2}>
-          <UserDataFields inputRef={register} userData={user_inputs} />
-          <InputField name={next_key} value={next_value} done={done} inputRef={register} />
-        </Grid>
-        <Button
-          type="submit"
-          fullWidth
-          variant="contained"
-          color="primary"
-          className={classes.submit}
-        >
-          {done ? "Submit" : "Next"}
-        </Button>
-      </form>
-    </div >
-  );
+  useEffect(() => {
+
+    if (!location.state) {
+      history.push("/")
+    }
+  },
+    [location, history]
+  )
+  if (location.state) {
+    const { user_inputs, next_key, next_value, done } = location.state;
+    return (
+      <div className={classes.paper}>
+        <Typography component="h1" variant="h5">
+          Please provide inputs
+        </Typography>
+        <form className={classes.form} onSubmit={handleSubmit(onSubmit)} >
+          <Grid container spacing={2}>
+            <UserDataFields inputRef={register} userData={user_inputs} />
+            <InputField name={next_key} value={next_value} done={done} inputRef={register} />
+          </Grid>
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            color="primary"
+            className={classes.submit}
+          >
+            {done ? "Submit" : "Next"}
+          </Button>
+        </form>
+      </div >
+    );
+  }
+  return null;
 }

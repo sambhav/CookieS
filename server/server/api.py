@@ -130,8 +130,9 @@ def get_token(code: str):
     response = requests.post(
         f"https://{BASE_URL}/login/oauth/access_token",
         data={"code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
+        headers={"Accept": "application/json"}
     )
-    data = dict(parse_qsl(response.text))
+    data = response.json()
     token = encrypt_token(data["access_token"])
     return {"token": token}
 
