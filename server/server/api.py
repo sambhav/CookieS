@@ -6,16 +6,19 @@ import tempfile
 from functools import lru_cache, partial
 from logging import error
 from pathlib import Path
+from urllib.parse import parse_qsl
 from typing import Any, Dict, List, Optional, Union
 
+import requests
 from cookiecutter.environment import StrictEnvironment
 from cookiecutter.generate import apply_overwrites_to_context
 from cookiecutter.main import cookiecutter
 from cookiecutter.prompt import render_variable
+from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from github import Github, GithubException
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 app = FastAPI()
 
@@ -40,39 +43,55 @@ GITHUB_API_URL = "https://api.github.com"
 
 
 # USER CONFIG
-# Token for the role account. Note: This is a secret value
-# and should not be checked in.
-TOKEN = os.environ.get("WEB_CC_TOKEN")
 # Github API host name. Useful for GHE usage.
 HOST_NAME = os.environ.get("WEB_CC_GITHUB_HOST_NAME", "")
 # Github base url. Useful for GHE usage.
 BASE_URL = os.environ.get("WEB_CC_GITHUB_BASE_URL", GITHUB_URL)
-# Role account username for use by the backend.
-BOT_NAME = os.environ.get("WEB_CC_BOT_NAME", "samj1912")
-# Role account email for use by the backend.
-# Will be used to create commits.
-BOT_MAIL = os.environ.get("WEB_CC_BOT_MAIL", "sambhavs.email@gmail.com")
+# See https://developer.github.com/apps/building-oauth-apps/creating-an-oauth-app/
+# On how to create an OAuth app
+# Github OAuth App Client ID.
+CLIENT_ID = os.environ.get("WEB_CC_OAUTH_CLIENT_ID")
+# Github OAuth App Client Secret.
+CLIENT_SECRET = os.environ.get("WEB_CC_OAUTH_CLIENT_SECRET")
+# A secret key generated via Fernet.generate_key().decode()
+# Please replace the default one below to ensure that the
+# tokens are passed securely between the frontend and the
+# backend.
+APP_KEY = os.environ.get(
+    "WEB_CC_APP_KEY", "6BkMvztw_O1tEaspovyOWHHk-yWhYZoL25YHWlhXRq4="
+)
+
+
+def encrypt_token(token: str):
+    return Fernet(APP_KEY).encrypt(token.encode()).decode()
+
+
+@lru_cache(maxsize=1024)
+def decrypt_token(token: str):
+    return Fernet(APP_KEY).decrypt(token.encode()).decode()
 
 
 ## Common Github utilities ##
 
 
 @lru_cache()
-def get_git_client():
+def get_git_client(token: str, encrypted=True):
     """Returns a Github client"""
     if BASE_URL == GITHUB_URL:
         host_name = GITHUB_API_URL
     else:
         host_name = f"https://{BASE_URL}/api/v3"
     host_name = HOST_NAME or host_name
-    return Github(base_url=host_name, login_or_token=TOKEN)
+    token = decrypt_token(token) if encrypted else token
+    return Github(base_url=host_name, login_or_token=token)
 
 
 @lru_cache()
-def get_current_user():
+def get_current_user(token):
     """Returns the PyGithub object representing the role account used for CC creation."""
-    client = get_git_client()
-    return client.get_user(BOT_NAME)
+    client = get_git_client(token)
+    name = client.get_user().login
+    return client.get_user(name)
 
 
 ## Initial user input gathering stage ##
@@ -90,18 +109,46 @@ def get_cookicutters():
     return {"cookiecutters": {"audreyr/cookiecutter-pypackage": [],}}
 
 
-def validate_org(org_name: str):
+@app.get("/oauth-url")
+def get_oauth():
+    """REST end point to get the Github OAuth endpoint."""
+    return {
+        "url": f"https://{BASE_URL}/login/oauth/authorize"
+        f"?client_id={CLIENT_ID}&scope=repo,read:read"
+    }
+
+
+@app.get("/oauth-token/{code}")
+def get_token(code: str):
+    """REST end point to fetch the list of supported cookiecutter.
+
+    Returns a map of cookiecutter repo names in `org/repo` format.
+    If the repository has nested cookiecutter in subdirectories, it
+    also returns a list of subdirectories which can be used. Otherwise
+    each key is associated with an empty list.
+    """
+    response = requests.post(
+        f"https://{BASE_URL}/login/oauth/access_token",
+        data={"code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
+    )
+    data = dict(parse_qsl(response.text))
+    token = encrypt_token(data["access_token"])
+    return {"token": token}
+
+
+def validate_org(org_name: str, token: str):
     """Validates if the user provided organization is a valid target to create the repository."""
-    client = get_git_client()
+    client = get_git_client(token)
     try:
         org = client.get_organization(org_name)
     except GithubException:
         return "Please enter a valid organization"
-    is_member = org.has_in_members(get_current_user())
+    user = get_current_user(token)
+    is_member = org.has_in_members(user)
     if not is_member:
         return (
-            f"{BOT_NAME} is not a member of the '{org_name}' organization."
-            f" Please invite {BOT_NAME} to this organization to continue."
+            f"{user.login} is not a member of the '{org_name}' organization."
+            f" Please invite {user.login} to this organization to continue."
         )
     if not org.members_can_create_repositories:
         return "This organization does not allow members to create repositories."
@@ -109,14 +156,14 @@ def validate_org(org_name: str):
 
 
 @app.get("/validate/{org_name}/{repo_name}")
-def validate(org_name: str, repo_name: str):
+def validate(org_name: str, repo_name: str, token: str):
     """Validates the user provided organization and repository.
 
     If the role account doesn't have access to the user-specified
     organization or if it doesn't exist, this end point returns an
     error with an appropriate message.
     """
-    org_response = validate_org(org_name)
+    org_response = validate_org(org_name, token)
     return {"org": org_response}
 
 
@@ -133,6 +180,7 @@ class FormDetails(BaseModel):
     org: str
     repo: str
     cc_context: Dict[str, Any] = {}
+    token: str
     user_inputs: Dict[str, Any] = {}
     next_key: Optional[str] = None
     next_value: Optional[Union[str, List[str]]] = None
@@ -156,7 +204,10 @@ def form(details: FormDetails):
     """
     if not details.cc_context:
         details.cc_context = get_config(
-            details.template.repo, details.template.directory, details.org
+            details.template.repo,
+            details.template.directory,
+            details.org,
+            details.token,
         )
     details.next_key, details.next_value, details.done = get_next_option(
         details.cc_context, details.user_inputs
@@ -164,9 +215,9 @@ def form(details: FormDetails):
     return details
 
 
-def get_config(repo_name, directory, user_org):
+def get_config(repo_name, directory, user_org, token):
     """Fetches the cookiecutter input template and the user defaults stored in Github."""
-    client = get_git_client()
+    client = get_git_client(token)
     cc_repo = client.get_repo(repo_name)
     config_file_path = "cookiecutter.json"
     if directory:
@@ -229,7 +280,8 @@ def validate_and_create(details: FormDetails):
             detail=f"Invalid user input. Missing inputs for: {missing_values}",
         )
     with tempfile.TemporaryDirectory(prefix="cookiecutter") as temp_dir:
-        client = get_git_client()
+        client = get_git_client(details.token)
+        user = client.get_user()
         try:
             client.get_organization(details.org).create_repo(details.repo)
         except GithubException:
@@ -246,11 +298,13 @@ def validate_and_create(details: FormDetails):
         output_dir = list(temp_dir_path.iterdir())[0]
         shell_command = partial(subprocess.run, shell=True, check=True, cwd=output_dir)
         shell_command("git init")
-        shell_command(f"git config --local user.name {BOT_NAME}")
-        shell_command(f"git config --local user.email {BOT_MAIL}")
-        shell_command(
-            f"git remote add {CC_ORIGIN} https://{BOT_NAME}:{TOKEN}@{BASE_URL}/{shlex.quote(details.org)}/{shlex.quote(details.repo)}"
+        shell_command(f"git config --local user.name {user.name}")
+        shell_command(f"git config --local user.email {user.email}")
+        url = (
+            f"https://{user.login}:{decrypt_token(details.token)}@"
+            f"{BASE_URL}/{shlex.quote(details.org)}/{shlex.quote(details.repo)}"
         )
+        shell_command(f"git remote add {CC_ORIGIN} {url}")
         shell_command("git add .")
         shell_command(
             f"git commit -m 'Initialize repository with CC: {details.template.repo}'"

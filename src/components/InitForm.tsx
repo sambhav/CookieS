@@ -7,7 +7,9 @@ import axios from 'axios';
 import theme from '../theme';
 import CookieCutterTemplate from './initform/CookieCutterTemplate';
 import UserRepo from './initform/UserRepo';
-import { useHistory } from 'react-router-dom';
+import { useHistory, Redirect } from 'react-router-dom';
+import Cookies from 'universal-cookie';
+import { useCookies } from 'react-cookie';
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -32,8 +34,13 @@ type Inputs = {
   repo: string;
 };
 
+const getUrl = (org: string, repo: string) => {
+  const cookies = new Cookies();
+  return `http://localhost:8000/validate/${org}/${repo}?token=${cookies.get('token')}`;
+}
+
 const resolver: Resolver<any> = async (values) => {
-  const { data }: any = await axios.get(`http://localhost:8000/validate/${values.org}/${values.repo}`);
+  const { data }: any = await axios.get(getUrl(values.org, values.repo));
   const errors: any = {};
   if (data?.org) {
     errors.org = {
@@ -58,16 +65,21 @@ export default function InitForm() {
   const classes = useStyles(theme);
   const { register, handleSubmit, errors } = useForm<Inputs>({ resolver, reValidateMode: 'onSubmit' });
   const history = useHistory();
+  const [cookies] = useCookies(['samj1912-cookies']);
+  if (!cookies.token) {
+    return <Redirect to={'/login'} />
+  }
   const onSubmit = (data: any) => {
     const requestOptions = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ ...data, token: cookies.token }),
     };
     fetch('http://localhost:8000/form', requestOptions)
       .then((response) => response.json())
       .then((data) => history.push("/create", data));
   };
+
   return (
     <div className={classes.paper}>
       <Typography component="h1" variant="h5">

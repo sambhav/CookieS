@@ -30,22 +30,25 @@ swagger UI at - `http://localhost:8000/docs`
 
 ### User configuration variables
 
-The web-cc is configured via environment variables. The configurable options are -
+CookieS back-end is configured via environment variables. The configurable options are -
 
 ```python
 # USER CONFIG
-# Token for the role account. Note: This is a secret value
-# and should not be checked in. This is a required config.
-WEB_CC_TOKEN
-# Github API host name. Useful for GHE usage. Default: ""
+# Github API host name. Useful for GHE usage.
 WEB_CC_GITHUB_HOST_NAME
-# Github base url. Useful for GHE usage. Defaults to public Github
+# Github base url. Useful for GHE usage.
 WEB_CC_GITHUB_BASE_URL
-# Role account username for use by the backend. Defaults to the username `samj1912`
-WEB_CC_BOT_NAME
-# Role account email for use by the backend.
-# Will be used to create commits. Defaults to the mail address `sambhavs.email@gmail.com`
-WEB_CC_BOT_MAIL
+# See https://developer.github.com/apps/building-oauth-apps/creating-an-oauth-app/
+# On how to create an OAuth app
+# Github OAuth App Client ID.
+WEB_CC_OAUTH_CLIENT_ID
+# Github OAuth App Client Secret.
+WEB_CC_OAUTH_CLIENT_SECRET
+# A secret key generated via Fernet.generate_key().decode()
+# Please replace the default one below to ensure that the
+# tokens are passed securely between the frontend and the
+# backend.
+WEB_CC_APP_KEY
 ```
 
 ## Client Docs

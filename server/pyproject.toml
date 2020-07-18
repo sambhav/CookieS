@@ -12,6 +12,8 @@ PyGithub = "^1.51"
 black = "^19.10b0"
 isort = "^5.0.9"
 cookiecutter = "^1.7.2"
+requests = "^2.24.0"
+cryptography = "^2.9.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^4.6"

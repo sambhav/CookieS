@@ -135,7 +135,7 @@ export default function CCForm() {
     fetch('http://localhost:8000/form', requestOptions)
       .then((response) => response.json())
       .then((newData) => {
-        history.push("/create", newData);
+        history.push(newData.done ? "/created" : "/create", newData);
       });
   };
   const { user_inputs, next_key, next_value, done } = location.state;
