@@ -11,7 +11,7 @@ for cookiecutters based on user specified organizations.
 Here is a demo of the web UI with the pypackage cookiecutter. Notice how it loadede the defaults from the .github repository
 of the user-specified org.
 
-![cookiecutter-demo](https://user-images.githubusercontent.com/16130816/87260603-b3e78380-c4aa-11ea-8078-5c8750752d0e.gif)
+![cookiecutter-demo](https://user-images.githubusercontent.com/16130816/87864056-13d2a400-c95b-11ea-9452-9bc64f3d3a1a.gif)
 
 ## Server Docs
 

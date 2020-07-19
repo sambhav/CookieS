@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import Typography from '@material-ui/core/Typography';
-import { Button, Grid, LinearProgress, Container } from '@material-ui/core';
+import { Button, Grid, LinearProgress, Container, Paper, Link, } from '@material-ui/core';
 import theme from '../theme';
+import { Alert, AlertTitle } from '@material-ui/lab';
 import { useLocation, useHistory } from 'react-router-dom';
+import { report } from 'process';
 
 
 const useStyles = makeStyles((theme) => ({
@@ -64,19 +66,17 @@ export default function Create() {
   },
     [created, location, setCreated, history]
   );
+  const { repo = "", org = "" } = location.state || {};
   const component = created ? (
-    <Button
-      variant="contained"
-      color="primary"
-    >
-      Successfully created
-    </Button>) : (<div className={classes.root}>
-      <Typography component="h1" variant="h6">
-        Please wait while your repository is being generated...
+    <Typography variant="h5">Successfully created <Link href={`https://github.com/${org}/${repo}`} >
+      {org}/{repo}  </Link></Typography>
+  ) : (<div className={classes.root}>
+    <Typography component="h1" variant="h6">
+      Please wait while your repository is being generated...
     </Typography>
 
-      <LinearProgress color="secondary" />
-    </div>);
+    <LinearProgress color="secondary" />
+  </div>);
 
   return (
     <div className={classes.paper}>
