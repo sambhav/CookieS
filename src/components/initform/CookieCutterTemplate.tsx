@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Grid, TextField } from '@material-ui/core';
 import Autocomplete from '@material-ui/lab/Autocomplete';
+import workerURL from '../../constants';
 
 interface Cookiecutters {
   [key: string]: string[]
@@ -10,7 +11,7 @@ const CookiecutterTemplate = ({ inputRef }: any) => {
   const [cookiecutters, setCookiecutters] = useState<Cookiecutters>({});
   useEffect(() => {
     if (Object.keys(cookiecutters).length === 0) {
-      fetch('http://localhost:8000/cookicutters')
+      fetch(`${workerURL}/cookicutters`)
         .then((response) => response.json())
         .then((data) => setCookiecutters(data.cookiecutters));
     }

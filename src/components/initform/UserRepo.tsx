@@ -24,9 +24,10 @@ const UserRepo = ({ inputRef, errors }: any) => (
         fullWidth
         inputRef={inputRef}
         id="repo"
-        helperText="Name of the repository your wish to create"
+        helperText={errors?.repo ? errors?.repo.message : 'Name of the repository your wish to create'}
         label="Repository"
         name="repo"
+        error={!!errors?.repo}
         autoComplete="repo"
       />
     </Grid>

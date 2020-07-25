@@ -4,15 +4,18 @@ import Typography from '@material-ui/core/Typography';
 import {
   CssBaseline, AppBar, Toolbar, ThemeProvider,
 } from '@material-ui/core';
+import {
+  BrowserRouter as Router, Route, Switch, Redirect,
+} from 'react-router-dom';
+import { CookiesProvider } from 'react-cookie';
 import theme from './theme';
 import InitForm from './components/InitForm';
-import { BrowserRouter as Router, Route, Switch, Redirect } from 'react-router-dom';
 import CCForm from './components/CCForm';
+import Error from './components/Error';
 
-import { CookiesProvider } from 'react-cookie';
 import AuthorizationForm from './components/AuthorizationForm';
 import Create from './components/Create';
-
+import DefaultDocs from './components/DefaultDocs';
 
 export default function App() {
   return (
@@ -39,16 +42,22 @@ export default function App() {
               <Route path="/authorize">
                 <AuthorizationForm />
               </Route>
-              <Route exact={true} path="/">
+              <Route path="/default-docs">
+                <DefaultDocs />
+              </Route>
+              <Route path="/error">
+                <Error />
+              </Route>
+              <Route exact path="/">
                 <InitForm />
               </Route>
-              <Route >
+              <Route>
                 <Redirect to="/authorize" />
               </Route>
             </Switch>
           </Container>
         </ThemeProvider>
-      </Router >
+      </Router>
     </CookiesProvider>
   );
 }

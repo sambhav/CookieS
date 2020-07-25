@@ -1,10 +1,7 @@
 # ![image](https://user-images.githubusercontent.com/16130816/87261930-09725f00-c4b0-11ea-986b-fef3a4d1b529.png) CookieS ![image](https://user-images.githubusercontent.com/16130816/87261894-e3e55580-c4af-11ea-9d60-49dee1b35b21.png)
 
 
-CookieS is a Cookiecutter as a Service platform. It spins up a web server that is able to discover
-and register Github repositories tagged with `cookiecutter` in their topics. It can
-then dynamically generate forms mirroring the inputs required for the cookiecutter creation
-and finally create a Github repository with the output. It also supports default values
+CookieS is a Cookiecutter as a Service platform. It can dynamically generate forms mirroring the inputs required for the cookiecutter creation and finally create a Github repository with the output. It also supports default values
 for cookiecutters based on user specified organizations.
 
 # Demo

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import Typography from '@material-ui/core/Typography';
-import { Button, Grid, LinearProgress, Container, Paper, Link, } from '@material-ui/core';
-import theme from '../theme';
-import { Alert, AlertTitle } from '@material-ui/lab';
+import {
+  Grid, LinearProgress, Container, Link, Card, CardContent,
+} from '@material-ui/core';
 import { useLocation, useHistory } from 'react-router-dom';
-import { report } from 'process';
-
+import theme from '../theme';
+import workerURL from '../constants';
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -23,7 +23,7 @@ const useStyles = makeStyles((theme) => ({
     margin: theme.spacing(3, 0, 2),
   },
   root: {
-    padding: "20px",
+    padding: '20px',
     width: '100%',
     '& > * + *': {
       marginTop: theme.spacing(2),
@@ -36,6 +36,7 @@ export default function Create() {
   const location = useLocation<any>();
   // Check the location state if the cookiecutter has been created already.
   const [created, setCreated] = useState(location.state?.created || false);
+  const [repoOutput, setRepoOutput] = useState({ url: '', output: '' });
   const history = useHistory();
   useEffect(() => {
     // We copy the location state
@@ -47,7 +48,7 @@ export default function Create() {
     const { ...ccState } = location.state || {};
     delete ccState.created;
     if (!Object.keys(ccState).length) {
-      history.push("/");
+      history.push('/');
       return;
     }
     const requestOptions = {
@@ -56,27 +57,63 @@ export default function Create() {
       body: JSON.stringify(ccState),
     };
     if (!created && ccState) {
-      fetch('http://localhost:8000/create', requestOptions)
-        .then((response) => response.json())
+      fetch(`${workerURL}/create`, requestOptions)
+        .then((response) => {
+          if (!response.ok) {
+            throw response;
+          }
+          return response.json();
+        })
         .then((newData) => {
           setCreated(true);
+          setRepoOutput(newData);
           history.replace(location.pathname, { ...location.state, created: true });
+        })
+        .catch((error) => {
+          error.json().then((data: any) => {
+            history.replace('/error', data);
+          });
         });
     }
   },
-    [created, location, setCreated, history]
-  );
-  const { repo = "", org = "" } = location.state || {};
+  [created, location, setCreated, history, repoOutput, setRepoOutput]);
+  const { repo = '', org = '' } = location.state || {};
   const component = created ? (
-    <Typography variant="h5">Successfully created <Link href={`https://github.com/${org}/${repo}`} >
-      {org}/{repo}  </Link></Typography>
-  ) : (<div className={classes.root}>
-    <Typography component="h1" variant="h6">
-      Please wait while your repository is being generated...
-    </Typography>
+    <Card className={classes.root}>
+      <CardContent>
+        <Typography variant="h5">
+          Successfully created
+          {' '}
+          <Link href={repoOutput.url}>
+            {org}
+            /
+            {repo}
+          </Link>
+        </Typography>
+        {(repoOutput.output !== ''
+          ? (
+            <>
+              <Typography color="textSecondary">
+                <br />
+                Output from the cookiecutter:
+              </Typography>
+              <Typography variant="body2" style={{ whiteSpace: 'pre-line', wordBreak: 'break-word' }}>
+                <br />
+                {repoOutput.output}
+              </Typography>
+            </>
+          ) : null)}
+      </CardContent>
+    </Card>
+  ) : (
+    <div className={classes.root}>
+      <Typography component="h1" variant="h6">
+        Please wait while your repository is being generated...
+      </Typography>
 
-    <LinearProgress color="secondary" />
-  </div>);
+      <LinearProgress color="secondary" />
+    </div>
+  );
 
   return (
     <div className={classes.paper}>
@@ -87,7 +124,6 @@ export default function Create() {
           justify="space-between"
           alignItems="center"
         >
-
           {component}
         </Grid>
       </Container>

@@ -4,12 +4,13 @@ import Typography from '@material-ui/core/Typography';
 import { Grid, Button } from '@material-ui/core';
 import { useForm, Resolver } from 'react-hook-form';
 import axios from 'axios';
-import theme from '../theme';
-import CookieCutterTemplate from './initform/CookieCutterTemplate';
-import UserRepo from './initform/UserRepo';
 import { useHistory, Redirect } from 'react-router-dom';
 import Cookies from 'universal-cookie';
 import { useCookies } from 'react-cookie';
+import theme from '../theme';
+import CookieCutterTemplate from './initform/CookieCutterTemplate';
+import UserRepo from './initform/UserRepo';
+import workerURL from '../constants';
 
 const useStyles = makeStyles((theme) => ({
   paper: {
@@ -36,8 +37,8 @@ type Inputs = {
 
 const getUrl = (org: string, repo: string) => {
   const cookies = new Cookies();
-  return `http://localhost:8000/validate/${org}/${repo}?token=${cookies.get('token')}`;
-}
+  return `${workerURL}/validate/${org}/${repo}?token=${cookies.get('token')}`;
+};
 
 const resolver: Resolver<any> = async (values) => {
   const { data }: any = await axios.get(getUrl(values.org, values.repo));
@@ -48,11 +49,17 @@ const resolver: Resolver<any> = async (values) => {
       message: data.org,
     };
   }
+  if (data?.repo) {
+    errors.repo = {
+      type: 'validate',
+      message: data.repo,
+    };
+  }
   return {
     values: {
       template: {
-        repo: values.template,
-        directory: values.directory || '',
+        repo: values.template.split('/').slice(0, 2).join('/'),
+        directory: values.template.split('/')[2] || '',
       },
       repo: values.repo,
       org: values.org,
@@ -67,7 +74,7 @@ export default function InitForm() {
   const history = useHistory();
   const [cookies] = useCookies();
   if (!cookies.token) {
-    return <Redirect to={'/authorize'} />
+    return <Redirect to="/authorize" />;
   }
   const onSubmit = (data: any) => {
     const requestOptions = {
@@ -75,9 +82,9 @@ export default function InitForm() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, token: cookies.token }),
     };
-    fetch('http://localhost:8000/form', requestOptions)
+    fetch(`${workerURL}/form`, requestOptions)
       .then((response) => response.json())
-      .then((data) => history.push("/create", data));
+      .then((data) => history.push('/create', data));
   };
 
   return (

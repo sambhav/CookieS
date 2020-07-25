@@ -1,12 +1,15 @@
 import json
+import logging
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
+from contextlib import redirect_stdout
 from functools import lru_cache, partial
-from logging import error
+from io import StringIO
 from pathlib import Path
-from urllib.parse import parse_qsl
+from subprocess import PIPE, STDOUT, CalledProcessError
 from typing import Any, Dict, List, Optional, Union
 
 import requests
@@ -18,7 +21,7 @@ from cryptography.fernet import Fernet
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from github import Github, GithubException
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -60,6 +63,9 @@ CLIENT_SECRET = os.environ.get("WEB_CC_OAUTH_CLIENT_SECRET")
 APP_KEY = os.environ.get(
     "WEB_CC_APP_KEY", "6BkMvztw_O1tEaspovyOWHHk-yWhYZoL25YHWlhXRq4="
 )
+CC_CONFIG_PATH = Path(__file__).absolute().parent / ".cookiecutterrc"
+
+logger = logging.getLogger()
 
 
 def encrypt_token(token: str):
@@ -70,6 +76,12 @@ def encrypt_token(token: str):
 def decrypt_token(token: str):
     return Fernet(APP_KEY).decrypt(token.encode()).decode()
 
+
+from cookiecutter import hooks
+
+from server.patched_run_script import run_script as patched_run_script
+
+hooks.run_script = patched_run_script
 
 ## Common Github utilities ##
 
@@ -106,7 +118,11 @@ def get_cookicutters():
     also returns a list of subdirectories which can be used. Otherwise
     each key is associated with an empty list.
     """
-    return {"cookiecutters": {"audreyr/cookiecutter-pypackage": [],}}
+    return {
+        "cookiecutters": {
+            "audreyr/cookiecutter-pypackage": []
+        }
+    }
 
 
 @app.get("/oauth-url")
@@ -114,7 +130,7 @@ def get_oauth():
     """REST end point to get the Github OAuth endpoint."""
     return {
         "url": f"https://{BASE_URL}/login/oauth/authorize"
-        f"?client_id={CLIENT_ID}&scope=repo,read:read"
+        f"?client_id={CLIENT_ID}&scope=public_repo,read:org"
     }
 
 
@@ -130,7 +146,7 @@ def get_token(code: str):
     response = requests.post(
         f"https://{BASE_URL}/login/oauth/access_token",
         data={"code": code, "client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
-        headers={"Accept": "application/json"}
+        headers={"Accept": "application/json"},
     )
     data = response.json()
     token = encrypt_token(data["access_token"])
@@ -140,11 +156,13 @@ def get_token(code: str):
 def validate_org(org_name: str, token: str):
     """Validates if the user provided organization is a valid target to create the repository."""
     client = get_git_client(token)
+    user = get_current_user(token)
+    if org_name == user.login:
+        return ""
     try:
         org = client.get_organization(org_name)
     except GithubException:
         return "Please enter a valid organization"
-    user = get_current_user(token)
     is_member = org.has_in_members(user)
     if not is_member:
         return (
@@ -156,6 +174,22 @@ def validate_org(org_name: str, token: str):
     return ""
 
 
+def validate_repo(org_name: str, repo_name: str, token: str):
+    """Validates if the user provided organization is a valid target to create the repository."""
+    client = get_git_client(token)
+    try:
+        repo = client.get_repo(f"{org_name}/{repo_name}")
+    except GithubException:
+        return ""
+    else:
+        # This method returns None if the git repo is empty
+        # It is an easy an inexpensive way to check for empty
+        # github repos
+        if repo.get_stats_contributors() is not None:
+            return "This repository already exists and has commits. Please choose an empty or non-existent repository."
+        return ""
+
+
 @app.get("/validate/{org_name}/{repo_name}")
 def validate(org_name: str, repo_name: str, token: str):
     """Validates the user provided organization and repository.
@@ -165,7 +199,10 @@ def validate(org_name: str, repo_name: str, token: str):
     error with an appropriate message.
     """
     org_response = validate_org(org_name, token)
-    return {"org": org_response}
+    repo_response = ""
+    if not org_response:
+        repo_response = validate_repo(org_name, repo_name, token)
+    return {"org": org_response, "repo": repo_response}
 
 
 ## Cookie cutter creation stage ##
@@ -186,7 +223,8 @@ class FormDetails(BaseModel):
     next_key: Optional[str] = None
     next_value: Optional[Union[str, List[str]]] = None
     done: bool = False
-
+    has_defaults = False
+    base_url = BASE_URL
 
 ### Interactive form endpoint ###
 
@@ -204,7 +242,7 @@ def form(details: FormDetails):
     The end point iteratively asks for the next set of inputs via `next_key` and `next_value`.
     """
     if not details.cc_context:
-        details.cc_context = get_config(
+        details.cc_context, details.has_defaults = get_config(
             details.template.repo,
             details.template.directory,
             details.org,
@@ -227,16 +265,17 @@ def get_config(repo_name, directory, user_org, token):
     try:
         config_repo = client.get_repo(f"{user_org}/.github")
     except GithubException:
-        return context
+        return context, False
     user_config = os.path.join("cookiecutter", repo_name, config_file_path)
     try:
         user_defaults = json.loads(
             config_repo.get_contents(user_config).decoded_content
         )
+    except Exception:
+        return context, False
+    else:
         apply_overwrites_to_context(context, user_defaults)
-    except GithubException:
-        pass
-    return context
+    return context, True
 
 
 def get_next_option(cc_context, user_inputs):
@@ -244,13 +283,26 @@ def get_next_option(cc_context, user_inputs):
     context = {}
     context["cookiecutter"] = cc_context
     env = StrictEnvironment(context=context)
-
     for key in context["cookiecutter"]:
+        if key == "_variables":
+            continue
         if key not in user_inputs:
-            rendered_value = render_variable(
-                env, context["cookiecutter"][key], user_inputs
+            raw_value = context["cookiecutter"][key]
+            if key.startswith("_") and not key.endswith("__"):
+                user_inputs[key] = render_variable(env, raw_value, user_inputs)
+                continue
+            variable_info = render_variable(
+                env, cc_context.get("_variables", {}).get(key, {}), user_inputs
             )
-            return key, rendered_value, False
+            if variable_info.get("skip", "False").lower() == "true":
+                rendered_value = render_variable(env, raw_value, user_inputs)
+                if isinstance(rendered_value, list):
+                    rendered_value = rendered_value[0]
+                user_inputs[key] = rendered_value
+                continue
+            if not isinstance(raw_value, dict):
+                rendered_value = render_variable(env, raw_value, user_inputs)
+                return key, rendered_value or "", False
     return None, None, True
 
 
@@ -268,13 +320,21 @@ def create(details: FormDetails):
     """
     try:
         return validate_and_create(details)
-    except BaseException as error:
+    except CalledProcessError as error:
+        logger.exception("Error occured: %s", error)
+        raise HTTPException(
+            status_code=500, detail=f"Error Occured:\n\n{error.stdout.decode()}"
+        )
+    except Exception as error:
+        logger.exception("Error occured: %s", error)
         raise HTTPException(status_code=500, detail=f"Error Occured: {error}")
 
 
 def validate_and_create(details: FormDetails):
     """Validates the final form inputs and creates the user repo from cookiecutter."""
-    missing_values = set(details.cc_context) - set(details.user_inputs)
+    missing_values = set(
+        key for key in details.cc_context if not key.startswith("_")
+    ) - set(details.user_inputs)
     if missing_values:
         raise HTTPException(
             status_code=400,
@@ -284,20 +344,34 @@ def validate_and_create(details: FormDetails):
         client = get_git_client(details.token)
         user = client.get_user()
         try:
-            client.get_organization(details.org).create_repo(details.repo)
+            if user.login == details.org:
+                user.create_repo(details.repo)
+            else:
+                client.get_organization(details.org).create_repo(details.repo)
         except GithubException:
             pass
-        cookiecutter(
-            f"https://{BASE_URL}/{details.template.repo}",
-            directory=details.template.directory,
-            no_input=True,
-            extra_context=details.user_inputs,
-            overwrite_if_exists=True,
-            output_dir=temp_dir,
-        )
+
+        output = StringIO()
+        with redirect_stdout(output):
+            cookiecutter(
+                f"https://{user.login}:{decrypt_token(details.token)}@{BASE_URL}/{details.template.repo}",
+                directory=details.template.directory,
+                no_input=True,
+                extra_context=details.user_inputs,
+                overwrite_if_exists=True,
+                output_dir=temp_dir,
+                config_file=CC_CONFIG_PATH,
+            )
         temp_dir_path = Path(temp_dir)
         output_dir = list(temp_dir_path.iterdir())[0]
-        shell_command = partial(subprocess.run, shell=True, check=True, cwd=output_dir)
+        shell_command = partial(
+            subprocess.run,
+            shell=True,
+            check=True,
+            cwd=output_dir,
+            stdout=PIPE,
+            stderr=STDOUT,
+        )
         shell_command("git init")
         shell_command(f"git config --local user.name {user.name}")
         shell_command(f"git config --local user.email {user.email}")
@@ -310,4 +384,8 @@ def validate_and_create(details: FormDetails):
         shell_command(
             f"git commit -m 'Initialize repository with CC: {details.template.repo}'"
         )
-        shell_command(f"git push {CC_ORIGIN} master -f")
+        shell_command(f"git push {CC_ORIGIN} master")
+        return {
+            "url": f"https://{BASE_URL}/{shlex.quote(details.org)}/{shlex.quote(details.repo)}",
+            "output": output.getvalue(),
+        }
