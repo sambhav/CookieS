@@ -2,13 +2,13 @@
 
 
 CookieS is a Cookiecutter as a Service platform. It spins up a web server that is able to discover
-and register Github repostiories tagged with `cookiecutter` in their topics. It can
+and register Github repositories tagged with `cookiecutter` in their topics. It can
 then dynamically generate forms mirroring the inputs required for the cookiecutter creation
 and finally create a Github repository with the output. It also supports default values
 for cookiecutters based on user specified organizations.
 
 # Demo
-Here is a demo of the web UI with the pypackage cookiecutter. Notice how it loadede the defaults from the .github repository
+Here is a demo of the web UI with the pypackage cookiecutter. Notice how it loadde the defaults from the .github repository
 of the user-specified org.
 
 ![cookiecutter-demo](https://user-images.githubusercontent.com/16130816/87864056-13d2a400-c95b-11ea-9452-9bc64f3d3a1a.gif)
