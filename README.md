@@ -8,7 +8,7 @@ and finally create a Github repository with the output. It also supports default
 for cookiecutters based on user specified organizations.
 
 # Demo
-Here is a demo of the web UI with the pypackage cookiecutter. Notice how it loadde the defaults from the .github repository
+Here is a demo of the web UI with the pypackage cookiecutter. Notice how it loaded the defaults from the .github repository
 of the user-specified org.
 
 ![cookiecutter-demo](https://user-images.githubusercontent.com/16130816/87864056-13d2a400-c95b-11ea-9452-9bc64f3d3a1a.gif)
