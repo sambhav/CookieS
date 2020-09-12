@@ -7,7 +7,7 @@ authors = ["Sambhav Kothari <sambhavs.email@gmail.com>"]
 [tool.poetry.dependencies]
 python = "~3.7"
 fastapi = "^0.58.1"
-uvicorn = "^0.11.5"
+uvicorn = "^0.11.7"
 PyGithub = "^1.51"
 black = "^19.10b0"
 isort = "^5.0.9"
